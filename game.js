@@ -4,8 +4,8 @@
     // ========== КОНСТАНТЫ ==========
     const BOARD_SIZE = 8;
     const EMPTY = 0;
-    const BLACK = 1; // игрок
-    const WHITE = 2; // компьютер
+    const BLACK = 1; // player
+    const WHITE = 2; // computer
 
     const DIRECTIONS = [
         [-1, -1], [-1, 0], [-1, 1],
@@ -21,6 +21,7 @@
     let isComputerThinking = false;
     let wins = 0;
     let isVKAvailable = false;
+    let CELL_SIZE = 0; // пересчитывается динамически
 
     // ========== DOM ==========
     const canvas = document.getElementById('boardCanvas');
@@ -40,12 +41,33 @@
     const greetingEl = document.getElementById('greeting');
     const statsEl = document.getElementById('stats');
     const userAvatar = document.getElementById('userAvatar');
+    const canvasContainer = document.getElementById('canvasContainer');
+
+    // ========== АДАПТАЦИЯ CANVAS ==========
+    function resizeCanvas() {
+        if (!canvasContainer) return;
+        const rect = canvasContainer.getBoundingClientRect();
+        const size = Math.min(rect.width, rect.height);
+        if (size <= 0) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(size * dpr);
+        canvas.height = Math.round(size * dpr);
+        canvas.style.width = size + 'px';
+        canvas.style.height = size + 'px';
+
+        // Масштабируем контекст
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Размер клетки в CSS-пикселях
+        CELL_SIZE = size / BOARD_SIZE;
+    }
 
     // ========== VK BRIDGE ==========
     async function initVK() {
         if (typeof vkBridge === 'undefined') {
             console.log('VK Bridge не загружен — работаем вне ВК');
-            statsEl.textContent = `Побед: ${wins}`;
+            statsEl.textContent = `Wins: ${wins}`;
             return;
         }
 
@@ -54,11 +76,23 @@
             isVKAvailable = true;
             console.log('VK Bridge инициализирован');
 
+            // Растянуть приложение в ВК
+            try {
+                await vkBridge.send('VKWebAppSetViewSettings', {
+                    status_bar_style: 'light',
+                    action_bar_color: '#2d6a4f'
+                });
+            } catch (e) {
+                console.warn('SetViewSettings:', e);
+            }
+
             // Подписка на события
             vkBridge.subscribe((e) => {
                 if (e.detail.type === 'VKWebAppUpdateConfig') {
                     const scheme = e.detail.data.scheme;
                     document.body.classList.toggle('dark', scheme === 'space_gray');
+                    // Перерисуем доску под новую тему
+                    drawBoard();
                 }
             });
 
@@ -66,7 +100,7 @@
             try {
                 const userInfo = await vkBridge.send('VKWebAppGetUserInfo');
                 if (userInfo) {
-                    greetingEl.textContent = `Привет, ${userInfo.first_name}!`;
+                    greetingEl.textContent = `Hi, ${userInfo.first_name}!`;
                     if (userInfo.photo_100) {
                         userAvatar.src = userInfo.photo_100;
                         userAvatar.style.display = 'block';
@@ -76,15 +110,14 @@
                 console.warn('Не удалось получить данные пользователя:', err);
             }
 
-            // Загружаем сохранённый прогресс
             await loadProgress();
         } catch (err) {
             console.warn('VK Bridge недоступен:', err);
-            statsEl.textContent = `Побед: ${wins}`;
+            statsEl.textContent = `Wins: ${wins}`;
         }
     }
 
-    // ========== СОХРАНЕНИЕ ПРОГРЕССА ==========
+    // ========== ПРОГРЕСС ==========
     async function loadProgress() {
         try {
             const { keys } = await vkBridge.send('VKWebAppStorageGet', {
@@ -93,10 +126,10 @@
             if (keys && keys[0] && keys[0].value) {
                 wins = parseInt(keys[0].value, 10) || 0;
             }
-            statsEl.textContent = `Побед: ${wins}`;
+            statsEl.textContent = `Wins: ${wins}`;
         } catch (err) {
             console.warn('Ошибка загрузки прогресса:', err);
-            statsEl.textContent = `Побед: ${wins}`;
+            statsEl.textContent = `Wins: ${wins}`;
         }
     }
 
@@ -112,18 +145,18 @@
         }
     }
 
-    // ========== ПОДЕЛИТЬСЯ ==========
+    // ========== SHARE ==========
     async function shareResult() {
         const { black, white } = countDiscs();
         let resultText;
-        if (black > white) resultText = `Я выиграл в Реверси со счётом ${black}:${white}! 🏆`;
-        else if (white > black) resultText = `Компьютер обыграл меня ${white}:${black} 😢`;
-        else resultText = `Ничья в Реверси ${black}:${white} 🤝`;
+        if (black > white) resultText = `I won at Reversi ${black}:${white}! 🏆`;
+        else if (white > black) resultText = `Computer beat me at Reversi ${white}:${black} 😢`;
+        else resultText = `Draw at Reversi ${black}:${white} 🤝`;
 
         if (isVKAvailable) {
             try {
                 await vkBridge.send('VKWebAppShare', {
-                    link: 'https://vk.com/app' // ← укажите ID вашего приложения после создания
+                    link: 'https://vk.com/app' // ← укажите ID приложения
                 });
                 return;
             } catch (err) {
@@ -131,11 +164,10 @@
             }
         }
 
-        // Фолбэк — копируем в буфер обмена
         if (navigator.clipboard) {
             try {
                 await navigator.clipboard.writeText(resultText);
-                messageDiv.textContent = 'Результат скопирован!';
+                messageDiv.textContent = 'Result copied!';
                 setTimeout(() => messageDiv.textContent = '', 2000);
             } catch (e) {
                 messageDiv.textContent = resultText;
@@ -244,22 +276,26 @@
     }
 
     // ========== ОТРИСОВКА ==========
-    const CELL_SIZE = canvas.width / BOARD_SIZE;
-
     function drawBoard() {
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--board-bg').trim() || '#2e5e3b';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const boardBg = getComputedStyle(document.body).getPropertyValue('--board-bg').trim() || '#2e5e3b';
+        const boardLine = getComputedStyle(document.body).getPropertyValue('--board-line').trim() || '#1e3b27';
 
-        ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--board-line').trim() || '#1e3b27';
-        ctx.lineWidth = 4;
+        const w = canvas.width / (window.devicePixelRatio || 1);
+        const h = canvas.height / (window.devicePixelRatio || 1);
+
+        ctx.fillStyle = boardBg;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = boardLine;
+        ctx.lineWidth = 3;
         for (let i = 0; i <= BOARD_SIZE; i++) {
             ctx.beginPath();
             ctx.moveTo(i * CELL_SIZE, 0);
-            ctx.lineTo(i * CELL_SIZE, canvas.height);
+            ctx.lineTo(i * CELL_SIZE, h);
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(0, i * CELL_SIZE);
-            ctx.lineTo(canvas.width, i * CELL_SIZE);
+            ctx.lineTo(w, i * CELL_SIZE);
             ctx.stroke();
         }
 
@@ -271,11 +307,11 @@
                 const radius = CELL_SIZE * 0.38;
 
                 ctx.shadowColor = 'rgba(0,0,0,0.6)';
-                ctx.shadowBlur = 10;
-                ctx.shadowOffsetY = 3;
-                ctx.shadowOffsetX = 2;
+                ctx.shadowBlur = 8;
+                ctx.shadowOffsetY = 2;
+                ctx.shadowOffsetX = 1;
 
-                const gradient = ctx.createRadialGradient(x - 5, y - 5, radius * 0.2, x, y, radius * 1.2);
+                const gradient = ctx.createRadialGradient(x - 4, y - 4, radius * 0.2, x, y, radius * 1.2);
                 if (board[r][c] === BLACK) {
                     gradient.addColorStop(0, '#666');
                     gradient.addColorStop(0.7, '#111');
@@ -293,14 +329,15 @@
                 ctx.shadowBlur = 0;
                 ctx.shadowOffsetY = 0;
                 ctx.shadowOffsetX = 0;
+
                 ctx.beginPath();
-                ctx.arc(x - 4, y - 4, radius * 0.2, 0, Math.PI * 2);
+                ctx.arc(x - radius * 0.25, y - radius * 0.25, radius * 0.2, 0, Math.PI * 2);
                 ctx.fillStyle = board[r][c] === BLACK ? '#aaa' : '#ffffffd0';
                 ctx.fill();
             }
         }
 
-        // Подсветка ходов игрока
+        // Подсветка доступных ходов игрока
         if (!gameOver && currentPlayer === BLACK && !isComputerThinking) {
             const validMoves = getValidMoves(BLACK);
             for (const [r, c] of validMoves) {
@@ -310,7 +347,7 @@
                 ctx.arc(x, y, CELL_SIZE * 0.18, 0, Math.PI * 2);
                 ctx.fillStyle = '#f4d03fcc';
                 ctx.shadowColor = '#f1c40f';
-                ctx.shadowBlur = 15;
+                ctx.shadowBlur = 12;
                 ctx.fill();
                 ctx.shadowBlur = 0;
             }
@@ -327,15 +364,15 @@
         whiteScoreSpan.textContent = white;
 
         if (gameOver) {
-            if (black > white) turnIndicator.textContent = '🏆 Вы победили!';
-            else if (white > black) turnIndicator.textContent = '🤖 Компьютер победил';
-            else turnIndicator.textContent = '🤝 Ничья';
+            if (black > white) turnIndicator.textContent = '🏆 You Win!';
+            else if (white > black) turnIndicator.textContent = '🤖 Computer Wins';
+            else turnIndicator.textContent = '🤝 Draw';
             return;
         }
 
         turnIndicator.textContent = currentPlayer === BLACK
-            ? 'Ваш ход (чёрные)'
-            : 'Ход компьютера (белые)';
+            ? 'Your turn (Black)'
+            : 'Computer\'s turn (White)';
     }
 
     function showGameOverModal() {
@@ -343,17 +380,17 @@
         let title, text;
 
         if (black > white) {
-            title = '🏆 Победа!';
-            text = `Вы выиграли со счётом ${black}:${white}`;
+            title = '🏆 Victory!';
+            text = `You won ${black}:${white}`;
             wins++;
-            statsEl.textContent = `Побед: ${wins}`;
+            statsEl.textContent = `Wins: ${wins}`;
             saveProgress();
         } else if (white > black) {
-            title = '😢 Поражение';
-            text = `Компьютер победил ${white}:${black}`;
+            title = '😢 Defeat';
+            text = `Computer won ${white}:${black}`;
         } else {
-            title = '🤝 Ничья';
-            text = `Счёт ${black}:${white}`;
+            title = '🤝 Draw';
+            text = `Score ${black}:${white}`;
         }
 
         modalTitle.textContent = title;
@@ -365,16 +402,17 @@
         modalOverlay.classList.remove('show');
     }
 
-    // ========== ХОД ИГРОКА ==========
+    // ========== КЛИК ПО ДОСКЕ ==========
     function handleCanvasClick(e) {
         if (gameOver || currentPlayer !== BLACK || isComputerThinking) return;
 
         const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
 
         let clientX, clientY;
-        if (e.touches && e.touches.length > 0) {
+        if (e.changedTouches && e.changedTouches.length > 0) {
+            clientX = e.changedTouches[0].clientX;
+            clientY = e.changedTouches[0].clientY;
+        } else if (e.touches && e.touches.length > 0) {
             clientX = e.touches[0].clientX;
             clientY = e.touches[0].clientY;
         } else {
@@ -382,15 +420,15 @@
             clientY = e.clientY;
         }
 
-        const mouseX = (clientX - rect.left) * scaleX;
-        const mouseY = (clientY - rect.top) * scaleY;
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
 
-        const col = Math.floor(mouseX / CELL_SIZE);
-        const row = Math.floor(mouseY / CELL_SIZE);
+        const col = Math.floor(x / (rect.width / BOARD_SIZE));
+        const row = Math.floor(y / (rect.height / BOARD_SIZE));
 
         if (!isOnBoard(row, col)) return;
         if (!isValidMove(row, col, BLACK)) {
-            messageDiv.textContent = 'Недопустимый ход!';
+            messageDiv.textContent = 'Invalid move!';
             setTimeout(() => messageDiv.textContent = '', 800);
             return;
         }
@@ -414,7 +452,7 @@
             isComputerThinking = true;
             setTimeout(() => computerMove(), 400);
         } else {
-            messageDiv.textContent = 'У компьютера нет ходов. Ваш ход снова.';
+            messageDiv.textContent = 'Computer has no moves. Your turn again.';
             currentPlayer = BLACK;
             if (blackMoves.length === 0) endGame();
             updateUI();
@@ -486,7 +524,7 @@
             drawBoard();
         } else {
             if (whiteMoves.length > 0) {
-                messageDiv.textContent = 'У вас нет ходов. Компьютер ходит ещё раз.';
+                messageDiv.textContent = 'You have no moves. Computer plays again.';
                 isComputerThinking = false;
                 updateUI();
                 drawBoard();
@@ -566,7 +604,7 @@
         }
     }
 
-    // ========== СБРОС ==========
+    // ========== СБРОС / СЛОЖНОСТЬ ==========
     function resetGame() {
         isComputerThinking = false;
         gameOver = false;
@@ -574,6 +612,7 @@
         messageDiv.textContent = '';
         hideModal();
         initBoard();
+        resizeCanvas();
         updateUI();
         drawBoard();
     }
@@ -588,6 +627,10 @@
 
     // ========== СОБЫТИЯ ==========
     canvas.addEventListener('click', handleCanvasClick);
+    canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        handleCanvasClick(e);
+    }, { passive: false });
 
     newGameBtn.addEventListener('click', resetGame);
     modalNewGame.addEventListener('click', resetGame);
@@ -606,9 +649,27 @@
         }
     });
 
+    // Реакция на изменение размера окна / ориентации
+    let resizeTimer = null;
+    function onResize() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            resizeCanvas();
+            drawBoard();
+        }, 100);
+    }
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', onResize);
+    }
+
     // ========== СТАРТ ==========
     initBoard();
+    resizeCanvas();
     updateUI();
     drawBoard();
     initVK();
+
 })();

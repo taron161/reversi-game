@@ -2,63 +2,64 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#2d6a4f">
-    <title>Реверси</title>
+    <title>Reversi</title>
     <link rel="stylesheet" href="style.css">
-    <!-- VK Bridge -->
     <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 </head>
 <body>
     <div class="app" id="app">
-        <!-- Шапка с игроком -->
+        <!-- Шапка -->
         <header class="header">
             <div class="user-info">
                 <img id="userAvatar" class="avatar" src="" alt="" style="display:none">
                 <div class="user-text">
-                    <div class="greeting" id="greeting">Реверси</div>
-                    <div class="stats" id="stats">Побед: 0</div>
+                    <div class="greeting" id="greeting">Reversi</div>
+                    <div class="stats" id="stats">Wins: 0</div>
                 </div>
             </div>
         </header>
 
-        <h1 class="title">РЕВЕРСИ</h1>
+        <h1 class="title">REVERSI</h1>
 
-        <!-- Уровни сложности -->
+        <!-- Уровни -->
         <div class="difficulty-panel" id="difficultyPanel">
-            <button data-level="easy" class="active">Лёгкий</button>
-            <button data-level="medium">Средний</button>
-            <button data-level="hard">Сложный</button>
+            <button data-level="easy" class="active">Easy</button>
+            <button data-level="medium">Medium</button>
+            <button data-level="hard">Hard</button>
         </div>
 
-        <!-- Игровое поле -->
+        <!-- Игровое поле (главный блок) -->
         <div class="board-wrapper">
-            <canvas id="boardCanvas" width="560" height="560"></canvas>
+            <div class="canvas-container" id="canvasContainer">
+                <canvas id="boardCanvas" width="560" height="560"></canvas>
+            </div>
 
             <div class="status-bar">
                 <div class="score">
                     <span><i class="disc black"></i> <span id="blackScore">2</span></span>
                     <span><i class="disc white"></i> <span id="whiteScore">2</span></span>
                 </div>
-                <div class="turn-indicator" id="turnIndicator">Ваш ход</div>
+                <div class="turn-indicator" id="turnIndicator">Your turn</div>
             </div>
 
             <div class="message" id="message"></div>
 
             <div class="buttons">
-                <button class="new-game-btn" id="newGameBtn">Новая игра</button>
-                <button class="share-btn" id="shareBtn">Поделиться</button>
+                <button class="new-game-btn" id="newGameBtn">New Game</button>
+                <button class="share-btn" id="shareBtn">Share</button>
             </div>
         </div>
 
-        <!-- Модальное окно окончания игры -->
+        <!-- Модалка -->
         <div class="modal-overlay" id="modalOverlay">
             <div class="modal">
-                <h2 id="modalTitle">Игра окончена</h2>
+                <h2 id="modalTitle">Game Over</h2>
                 <p id="modalText"></p>
                 <div class="modal-buttons">
-                    <button class="new-game-btn" id="modalNewGame">Ещё раз</button>
-                    <button class="share-btn" id="modalShare">Поделиться</button>
+                    <button class="new-game-btn" id="modalNewGame">Play Again</button>
+                    <button class="share-btn" id="modalShare">Share</button>
                 </div>
             </div>
         </div>
